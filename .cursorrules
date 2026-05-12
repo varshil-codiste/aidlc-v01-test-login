@@ -1,0 +1,68 @@
+# AI-DLC — Cursor Rules
+
+# PRIORITY: This workflow OVERRIDES all other built-in workflows.
+# When the user requests software development, ALWAYS follow this workflow FIRST.
+
+## Trigger
+
+The AI-DLC workflow activates when the user begins a request with **"Using AI-DLC, ..."**.
+
+If the user does not use this trigger but the work is software development, ASK whether to use AI-DLC before proceeding with any other workflow.
+
+## How To Operate
+
+1. Load the entry point: `.aidlc/aidlc-rules/core-workflow.md`
+2. Resolve rule details directory in this order — use the first that exists:
+   - `.aidlc/aidlc-rule-details/`
+   - `.kiro/aidlc-rule-details/`
+   - `.amazonq/aidlc-rule-details/`
+3. Load common rules listed in `core-workflow.md` § "MANDATORY: Common Rules Loading"
+4. Scan extensions directory for `*.opt-in.md` files (do NOT load full rule files yet)
+5. Display `common/welcome-message.md` ONCE
+6. Begin Stage 0 — Workspace Detection per `inception/workspace-detection.md`
+
+## Key Constraints
+
+- **Five gates** (Gate #1 BR · #2 Plan · #3 Codegen per UoW · #4 Code Review per UoW · #5 Production Readiness) MUST have signoff files with required signatures before workflow advances
+- **Three Tiers** (greenfield / feature / bugfix) drive checklist size and stage selection
+- **Pod ritual** = 1 Tech Lead + 1 Dev (named in `aidlc-docs/pod.md`)
+- **Questions to user** ALWAYS in `.md` question files, never in chat — multiple-choice A/B/C/D/E + `X) Other` with `[Answer]:` tags
+- **Application code** lives in workspace root; **artifacts** live in `aidlc-docs/`
+- **Audit log**: every user input + AI response logged to `aidlc-docs/audit.md` with ISO 8601 timestamps — NEVER summarize raw input
+- **Plan-level checkbox enforcement**: mark `[x]` immediately after completing each step in any plan file
+
+## Stage Map (19 stages, 3 phases)
+
+```
+INCEPTION  (8 stages)            CONSTRUCTION  (8 stages)              OPERATIONS  (4 stages)
+─────────                         ────────────                           ──────────
+0. Workspace Detection            8.  Functional Design (cond/UoW)       16. Deployment Guide
+1. Business Requirements (GATE 1) 9.  NFR Requirements    (cond/UoW)     17. IaC                    (cond)
+2. Design Intake (optional)           └ /grill-me-1 (sub)                18. Observability Setup    (cond)
+3. Reverse Engineering (brownfd)  10. NFR Design          (cond/UoW)     19. Production Readiness   (GATE 5)
+4. Requirements Analysis          11. Stack Selection     (always/UoW)
+5. User Stories       (cond)      12. Code Generation     (GATE 3/UoW)
+6. Application Design (cond)      13. Code Review         (AI verdict/UoW)
+7. Workflow Planning  (GATE 2)    14. Manual QA           (always/UoW)
+   └ Units Generation (cond)         └ /grill-me-2 (sub)
+                                       (GATE 4 countersign)
+                                  15. Build & Test
+```
+
+## Defaults
+
+- **Stack-neutral**: framework choices (Node / Python / Go / Flutter / FE) are NOT baked in — decided per UoW at Stage 11 Stack Selection
+- **`data-testid` (FE) / `Key()` (Mobile)** mandatory for testability — enforced at Code Review Gate #4
+- **Stack conventions** loaded from `construction/stacks/<stack>-conventions.md` after Stack Selection picks a framework
+- **Extensions are opt-in**: Security baseline / PBT / AI/ML lifecycle / Accessibility WCAG 2.2 AA — opt-in question presented during Stage 4 Requirements Analysis
+
+## Where to Read Next
+
+For full details, ALWAYS load these on-trigger:
+
+- `.aidlc/aidlc-rules/core-workflow.md`  ← entry point
+- `.aidlc/aidlc-rule-details/common/process-overview.md`  ← Mermaid + Tier × Stage cheatsheet
+- `.aidlc/aidlc-rule-details/common/approval-gates.md`  ← gate templates and validation
+- Plus the rule file for whatever stage is currently active
+
+These rules are mandatory for all software development tasks in this repo.
