@@ -1,0 +1,22 @@
+{
+  "name": "login-account-setup",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-DLC v0.1 reference implementation — login + account-setup feature",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "setup": "bash scripts/setup.sh",
+    "dev": "bash scripts/dev.sh",
+    "dev:docker": "docker compose up",
+    "dev:down": "docker compose down",
+    "dev:reset": "docker compose down -v && bash scripts/setup.sh",
+    "ci": "bash scripts/ci.sh",
+    "gen:keys": "bash scripts/gen-keys.sh"
+  },
+  "packageManager": "npm@10.0.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

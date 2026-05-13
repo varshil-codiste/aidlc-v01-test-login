@@ -1,0 +1,58 @@
+// Prisma schema — auth UoW
+// Source of truth: aidlc-docs/construction/auth/functional-design/domain-entities.md
+// Conventions:
+//   - email is normalized to lowercase IN APP CODE (BR-A02 / Q4=A); column is plain TEXT.
+//   - password_hash NEVER returned by any API; UserDto excludes it by inclusion (not exclusion).
+//   - failed_login_attempts is intentionally NOT a table — in-memory map per Stage 8 Q3=A.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// roles-profile UoW — BR-A14, NFR-MAINT-003.
+// Set MUST match shared/role.ts ROLES.
+enum Role {
+  MERCHANT
+  SELLER
+}
+
+model User {
+  id                       String         @id @default(uuid()) @db.Uuid
+  email                    String         @unique
+  displayName              String         @map("display_name")
+  passwordHash             String         @map("password_hash")
+  timezone                 String         @default("Asia/Kolkata")
+  verified                 Boolean        @default(true)
+  accountSetupCompleted    Boolean        @default(false) @map("account_setup_completed")
+  role                     Role           @default(SELLER)
+  createdAt                DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  refreshTokens            RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id          String         @id @default(uuid()) @db.Uuid
+  userId      String         @map("user_id") @db.Uuid
+  familyId    String         @map("family_id") @db.Uuid
+  tokenHash   String         @unique @map("token_hash")
+  parentId    String?        @map("parent_id") @db.Uuid
+  rotatedAt   DateTime?      @map("rotated_at") @db.Timestamptz
+  revoked     Boolean        @default(false)
+  expiresAt   DateTime       @map("expires_at") @db.Timestamptz
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent      RefreshToken?  @relation("Rotation", fields: [parentId], references: [id])
+  rotatedTo   RefreshToken[] @relation("Rotation")
+
+  @@index([userId, familyId])
+  @@map("refresh_tokens")
+}
