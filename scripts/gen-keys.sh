@@ -52,7 +52,8 @@ add_if_missing DATABASE_URL              "postgresql://app:app@localhost:5433/au
 add_if_missing FE_ORIGIN                 "http://localhost:3000"
 add_if_missing APP_ENV                   "dev"
 add_if_missing LOG_LEVEL                 "info"
-add_if_missing PORT                      "4000"
+# NOTE: BE port defaults to 4000 in code. Do NOT export a global PORT in .env.local —
+# `next dev` reads PORT too and would steal whichever the BE wants.
 add_if_missing NEXT_PUBLIC_API_BASE_URL  "http://localhost:4000"
 
 # --- 3. Frontend mirror ---------------------------------------------------

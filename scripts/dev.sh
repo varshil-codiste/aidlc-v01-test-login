@@ -36,7 +36,9 @@ echo ""
 # Trap Ctrl+C — kill all children.
 trap 'kill 0' INT TERM EXIT
 
-( cd apps/backend  && npm run start:dev 2>&1 | prefix BE ) &
-( cd apps/frontend && npm run dev       2>&1 | prefix FE ) &
+# Pin explicit ports per service. Without this, if .env.local exports a generic
+# `PORT=N`, BOTH `nest start` and `next dev` see it — whichever boots first wins.
+( cd apps/backend  && PORT=4000 npm run start:dev 2>&1 | prefix BE ) &
+( cd apps/frontend && PORT=3000 npm run dev       2>&1 | prefix FE ) &
 
 wait
