@@ -1,0 +1,128 @@
+name: clone-smoke
+
+# Simulates a brand-new contributor cloning the repo and following the 3-command
+# README flow: `npm install` → `npm run setup` → `npm run dev`.
+# Then probes BE :4000 and FE :3000 and runs one signup against a live DB.
+#
+# Goal: catch devex regressions like the PORT collision that wasted ~10 min on
+# the first manual clone-test (commit 1a90720). Should never silently break.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  clone-smoke:
+    name: clone + setup + dev + smoke signup
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout (simulates `git clone`)
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Show Docker + Compose versions
+        run: |
+          docker --version
+          docker compose version
+
+      - name: STEP 1 — npm install
+        run: npm install
+
+      - name: STEP 2 — npm run setup
+        run: npm run setup
+
+      - name: Assert setup wrote keys + dev env (without revealing them)
+        run: |
+          grep -q '^JWT_PRIVATE_KEY=' .env.local && echo 'JWT_PRIVATE_KEY: present'
+          grep -q '^JWT_PUBLIC_KEY='  .env.local && echo 'JWT_PUBLIC_KEY: present'
+          grep -q '^DATABASE_URL='    .env.local && echo 'DATABASE_URL: present'
+          grep -q '^APP_ENV=dev$'     .env.local && echo 'APP_ENV=dev: present'
+          if grep -q '^PORT=' .env.local; then
+            echo 'FAIL: global PORT in .env.local will collide between BE/FE — see commit 1a90720' >&2
+            exit 1
+          else
+            echo 'OK: no global PORT in .env.local'
+          fi
+          grep -q '^NEXT_PUBLIC_API_BASE_URL=' apps/frontend/.env.local \
+            && echo 'FE .env.local: present'
+
+      - name: STEP 3 — npm run dev (background) + wait for both ports
+        run: |
+          nohup npm run dev > /tmp/dev.log 2>&1 &
+          echo "dev pid: $!"
+          echo "Waiting for BE :4000 and FE :3000 (180s timeout)…"
+          for i in $(seq 1 90); do
+            BE=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:4000/health 2>/dev/null || echo none)
+            FE=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:3000/        2>/dev/null || echo none)
+            if [ "$BE" = "200" ] && [ "$FE" = "200" ]; then
+              echo "READY after $((i*2))s — BE=$BE FE=$FE"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo '== dev.log (tail) ==' >&2
+          tail -80 /tmp/dev.log >&2
+          echo "TIMEOUT — BE or FE failed to become ready in 180s" >&2
+          exit 1
+
+      - name: BE smoke — /health + /.well-known/jwks.json
+        run: |
+          set -e
+          curl -sf http://localhost:4000/health > /dev/null
+          curl -sf http://localhost:4000/.well-known/jwks.json | jq -e '.keys | length > 0' > /dev/null
+          echo 'BE smoke: OK'
+
+      - name: FE smoke — Landing + /signup render
+        run: |
+          set -e
+          curl -sf http://localhost:3000/ | grep -q -i 'sign'
+          curl -sf http://localhost:3000/signup | grep -q 'data-testid="signup-role-merchant"'
+          curl -sf http://localhost:3000/signup | grep -q 'data-testid="signup-role-seller"'
+          echo 'FE smoke: OK'
+
+      - name: End-to-end smoke — Merchant signup
+        run: |
+          set -e
+          email="smoke+$GITHUB_SHA@example.com"
+          body=$(curl -s -X POST http://localhost:4000/auth/signup \
+            -H 'content-type: application/json' \
+            -d "{\"email\":\"$email\",\"displayName\":\"CI Smoke\",\"password\":\"CorrectHorseBattery42!\",\"role\":\"MERCHANT\"}")
+          echo "$body" | jq -e '.user.role == "MERCHANT"' > /dev/null
+          echo "$body" | jq -e '.user.email == "'"$email"'"' > /dev/null
+          echo 'Signup smoke (MERCHANT 201 + role echoed): OK'
+
+      - name: End-to-end smoke — invalid role returns 400
+        run: |
+          set -e
+          status=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:4000/auth/signup \
+            -H 'content-type: application/json' \
+            -d '{"email":"bad@example.com","displayName":"x","password":"CorrectHorseBattery42!","role":"ADMIN"}')
+          if [ "$status" != "400" ]; then
+            echo "FAIL: expected 400 for invalid role, got $status" >&2
+            exit 1
+          fi
+          echo 'Invalid-role smoke (400): OK'
+
+      - name: Upload dev log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-log
+          path: /tmp/dev.log
+          retention-days: 7
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose down -v || true
+          pkill -f "nest start" || true
+          pkill -f "next dev"   || true
